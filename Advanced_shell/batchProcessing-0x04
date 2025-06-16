@@ -1,60 +1,67 @@
 #!/bin/bash
 
-# Create directory for pokemon data
+# Create directory for pokemon data if it doesn't exist
 mkdir -p pokemon_data
 
-# Pokémon list and API URL
+# List of Pokémon to fetch
 pokemon_list=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+
+# Base API URL
 api_url="https://pokeapi.co/api/v2/pokemon"
 
-# Function to fetch with retries
+# Function to fetch a single Pokémon's data
 fetch_pokemon() {
     local pokemon=$1
     local retries=3
     local delay=1
     
     for (( i=1; i<=retries; i++ )); do
+        echo "Fetching $pokemon (attempt $i)..."
         if curl -s -o "pokemon_data/${pokemon}.json" "${api_url}/${pokemon}"; then
-            echo "✅ $pokemon fetched successfully"
+            echo "✅ Successfully fetched $pokemon"
             return 0
+        else
+            echo "⚠️ Attempt $i failed for $pokemon"
+            sleep $delay
+            delay=$((delay * 2))
         fi
-        sleep $delay
-        delay=$((delay * 2))
     done
+    
     echo "❌ Failed to fetch $pokemon after $retries attempts" >> errors.txt
     return 1
 }
 
 # Initialize process tracking
-declare -a pids
-max_parallel=3
+declare -A pid_map  # Using associative array to track pokemon names with PIDs
+max_parallel=3      # Limit concurrent processes
+completed=0
 
-
-# Main execution with process control
-(
+# Main processing loop
 for pokemon in "${pokemon_list[@]}"; do
     # Wait if we've reached max parallel processes
-    while [ ${#pids[@]} -ge $max_parallel ]; do
+    while [ ${#pid_map[@]} -ge $max_parallel ]; do
         # Check for completed processes
-        for i in "${!pids[@]}"; do
-            if ! ps -p "${pids[i]}" > /dev/null 2>&1; then
-                unset pids[i]
+        for pid in "${!pid_map[@]}"; do
+            if ! ps -p "$pid" > /dev/null 2>&1; then
+                unset pid_map["$pid"]
+                ((completed++))
+                echo "Completed ${completed}/${#pokemon_list[@]} Pokémon (${pid_map[$pid]})"
             fi
         done
         sleep 0.1
     done
-
-    # Start new fetch
+    
+    # Start fetch in background
     fetch_pokemon "$pokemon" &
-    pids+=($!)
-    echo "🚀 Started fetching $pokemon (PID: $!)"
+    pid=$!
+    pid_map["$pid"]="$pokemon"
 done
 
 # Wait for remaining processes
-for pid in "${pids[@]}"; do
+for pid in "${!pid_map[@]}"; do
     wait "$pid"
-
+    ((completed++))
+    echo "Completed ${completed}/${#pokemon_list[@]} Pokémon (${pid_map[$pid]})"
 done
-)
 
-echo "All done! Results in pokemon_data/"
+echo "All Pokémon data fetched!"
