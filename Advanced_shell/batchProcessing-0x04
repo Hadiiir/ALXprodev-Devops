@@ -25,21 +25,20 @@ fetch_pokemon() {
     return 1
 }
 
-# Initialize variables
-declare -A pid_map
+# Initialize process tracking
+declare -a pids
 max_parallel=3
-running=0
 
-# Main execution loop
+
+# Main execution with process control
+(
 for pokemon in "${pokemon_list[@]}"; do
-    # Wait for slot if max parallel reached
-    while [ $running -ge $max_parallel ]; do
-        # Check completed processes
-        for pid in "${!pid_map[@]}"; do
-            if ! kill -0 "$pid" 2>/dev/null; then
-                unset pid_map["$pid"]
-                ((running--))
-                echo "ℹ️  ${pid_map[$pid]} finished"
+    # Wait if we've reached max parallel processes
+    while [ ${#pids[@]} -ge $max_parallel ]; do
+        # Check for completed processes
+        for i in "${!pids[@]}"; do
+            if ! ps -p "${pids[i]}" > /dev/null 2>&1; then
+                unset pids[i]
             fi
         done
         sleep 0.1
@@ -47,16 +46,15 @@ for pokemon in "${pokemon_list[@]}"; do
 
     # Start new fetch
     fetch_pokemon "$pokemon" &
-    pid=$!
-    pid_map[$pid]=$pokemon
-    ((running++))
-    echo "🚀 Started fetching $pokemon (PID: $pid)"
+    pids+=($!)
+    echo "🚀 Started fetching $pokemon (PID: $!)"
 done
 
-# Final wait for remaining processes
-for pid in "${!pid_map[@]}"; do
+# Wait for remaining processes
+for pid in "${pids[@]}"; do
     wait "$pid"
-    echo "✔️  ${pid_map[$pid]} completed"
+
 done
+)
 
 echo "All done! Results in pokemon_data/"
