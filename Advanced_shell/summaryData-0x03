@@ -7,37 +7,54 @@ echo "CSV Report generated at: $output_file"
 # CSV header
 echo "Name,Height (m),Weight (kg)" > "$output_file"
 
-# Initialize temp file for awk processing
-temp_file=$(mktemp)
-
-# Process each JSON file
-for file in pokemon_data/*.json; do
-    # Extract data using jq and format with awk
-    jq -r '[
-        .name | ascii_upcase[:1] + .[1:],
-        (.height/10 | tostring),
-        (.weight/10 | tostring)
-    ] | join(",")' "$file" >> "$temp_file"
-done
-
-# Sort the data and add to CSV
-sort "$temp_file" >> "$output_file"
-
-# Calculate averages using awk
-awk -F, '
-    {
-        total_h += $2; 
-        total_w += $3; 
-        count++
-    } 
-    END {
-        printf "\nAverage Height: %.2f m\n", total_h/count; 
-        printf "Average Weight: %.2f kg\n", total_w/count
+# Process files and collect data for averages
+awk -v csv="$output_file" '
+BEGIN {
+    FS = ",";
+    total_h = 0;
+    total_w = 0;
+    count = 0;
+    # Print header to CSV
+    print "Name,Height (m),Weight (kg)" > csv
+}
+{
+    # Process each JSON file passed as argument
+    while ((getline line < $0) > 0) {
+        if (line ~ /"name":/) {
+            split(line, a, "\"");
+            name = a[4];
+            # Capitalize first letter
+            name = toupper(substr(name,1,1)) substr(name,2);
+        }
+        else if (line ~ /"height":/) {
+            split(line, a, ":");
+            height = a[2];
+            gsub(/[^0-9]/, "", height);
+            height = height/10;
+        }
+        else if (line ~ /"weight":/) {
+            split(line, a, ":");
+            weight = a[2];
+            gsub(/[^0-9]/, "", weight);
+            weight = weight/10;
+        }
     }
-' "$temp_file"
-
-# Clean up
-rm "$temp_file"
+    close($0);
+    
+    # Add to CSV
+    print name "," height "," weight >> csv;
+    
+    # Accumulate for averages
+    total_h += height;
+    total_w += weight;
+    count++;
+}
+END {
+    # Calculate and print averages
+    printf "\nAverage Height: %.2f m\n", total_h/count;
+    printf "Average Weight: %.2f kg\n", total_w/count;
+}
+' pokemon_data/*.json
 
 # Display the CSV file
 cat "$output_file"
