@@ -22,15 +22,15 @@ for file in pokemon_data/*.json; do
     # Add to CSV
     echo "$name,$height,$weight" >> "$output_file"
     
-    # Accumulate for averages
-    total_height=$(awk "BEGIN {print $total_height + $height}")
-    total_weight=$(awk "BEGIN {print $total_weight + $weight}")
+    # Accumulate for averages using awk
+    total_height=$(awk -v h="$height" -v th="$total_height" 'BEGIN {print th + h}')
+    total_weight=$(awk -v w="$weight" -v tw="$total_weight" 'BEGIN {print tw + w}')
     count=$((count + 1))
 done
 
-# Calculate averages
-avg_height=$(awk "BEGIN {printf \"%.2f\", $total_height/$count}")
-avg_weight=$(awk "BEGIN {printf \"%.2f\", $total_weight/$count}")
+# Calculate averages using awk
+avg_height=$(awk -v th="$total_height" -v c="$count" 'BEGIN {printf "%.2f", th/c}')
+avg_weight=$(awk -v tw="$total_weight" -v c="$count" 'BEGIN {printf "%.2f", tw/c}')
 
 # Display the CSV file
 cat "$output_file"
