@@ -32,36 +32,27 @@ fetch_pokemon() {
 }
 
 # Initialize process tracking
-declare -A pid_map  # Using associative array to track pokemon names with PIDs
-max_parallel=3      # Limit concurrent processes
+declare -a pids
+max_parallel=3  # Limit concurrent processes
 completed=0
 
 # Main processing loop
 for pokemon in "${pokemon_list[@]}"; do
     # Wait if we've reached max parallel processes
-    while [ ${#pid_map[@]} -ge $max_parallel ]; do
-        # Check for completed processes
-        for pid in "${!pid_map[@]}"; do
-            if ! ps -p "$pid" > /dev/null 2>&1; then
-                unset pid_map["$pid"]
-                ((completed++))
-                echo "Completed ${completed}/${#pokemon_list[@]} Pokémon (${pid_map[$pid]})"
-            fi
-        done
+    while [ $(jobs -rp | wc -l) -ge $max_parallel ]; do
         sleep 0.1
     done
     
     # Start fetch in background
     fetch_pokemon "$pokemon" &
-    pid=$!
-    pid_map["$pid"]="$pokemon"
+    pids+=($!)
 done
 
-# Wait for remaining processes
-for pid in "${!pid_map[@]}"; do
+# Wait for all background processes to complete
+for pid in "${pids[@]}"; do
     wait "$pid"
     ((completed++))
-    echo "Completed ${completed}/${#pokemon_list[@]} Pokémon (${pid_map[$pid]})"
+    echo "Completed $completed/${#pokemon_list[@]} Pokémon"
 done
 
 echo "All Pokémon data fetched!"
